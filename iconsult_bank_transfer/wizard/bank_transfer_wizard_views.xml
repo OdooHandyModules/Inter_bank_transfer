@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_baho_bank_transfer_wizard_form" model="ir.ui.view">
+        <field name="name">baho.bank.transfer.wizard.form</field>
+        <field name="model">baho.bank.transfer.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Bank Transfer">
+                <field name="st_line_id" invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <field name="line_currency_id" invisible="1"/>
+                <field name="counterpart_currency_id" invisible="1"/>
+                <field name="is_cross_currency" invisible="1"/>
+                <field name="counterpart_imported" invisible="1"/>
+                <field name="pending_transfer_ids" invisible="1"/>
+                <field name="candidate_line_ids" invisible="1"/>
+                <field name="rate_from_currency_id" invisible="1"/>
+                <field name="rate_to_currency_id" invisible="1"/>
+                <group>
+                    <group string="This Line">
+                        <field name="direction" widget="badge" decoration-danger="direction == 'out'"
+                               decoration-success="direction == 'in'"/>
+                        <field name="journal_id"/>
+                        <field name="line_date"/>
+                        <field name="line_amount"/>
+                        <field name="line_label"/>
+                    </group>
+                    <group string="Other Side">
+                        <field name="pending_transfer_id" invisible="not pending_transfer_ids"
+                               options="{'no_create': True}"/>
+                        <field name="counterpart_journal_id" string="To"
+                               invisible="direction != 'out' or pending_transfer_id"
+                               required="not pending_transfer_id" options="{'no_create': True}"/>
+                        <field name="counterpart_journal_id" string="From"
+                               invisible="direction != 'in' or pending_transfer_id"
+                               required="not pending_transfer_id" options="{'no_create': True}"/>
+                        <label for="rate" invisible="not is_cross_currency or pending_transfer_id"/>
+                        <div class="o_row" invisible="not is_cross_currency or pending_transfer_id">
+                            <field name="rate_label" nolabel="1"/>
+                            <field name="rate" nolabel="1"/>
+                            <field name="rate_to_currency_id" nolabel="1" readonly="1"
+                                   options="{'no_open': True}"/>
+                        </div>
+                        <field name="expected_amount" invisible="not counterpart_journal_id or pending_transfer_id"/>
+                        <field name="counterpart_st_line_id"
+                               invisible="not counterpart_journal_id or pending_transfer_id or not counterpart_imported"
+                               options="{'no_create': True}"/>
+                    </group>
+                </group>
+                <group invisible="pending_transfer_id">
+                    <group string="Bank Charges">
+                        <field name="include_charges"/>
+                        <field name="charge_amount" invisible="not include_charges" required="include_charges"/>
+                        <field name="charge_account_id" invisible="not include_charges"
+                               required="include_charges" options="{'no_create': True}"/>
+                    </group>
+                    <group>
+                        <field name="memo"/>
+                    </group>
+                </group>
+                <div class="alert alert-info mb-0" role="status" invisible="not outcome">
+                    <field name="outcome" nolabel="1"/>
+                </div>
+                <footer>
+                    <button name="action_confirm" type="object" string="Confirm" class="btn-primary"
+                            data-hotkey="q"/>
+                    <button string="Discard" special="cancel" class="btn-secondary" data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_baho_bank_transfer_wizard" model="ir.actions.act_window">
+        <field name="name">Bank Transfer</field>
+        <field name="res_model">baho.bank.transfer.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

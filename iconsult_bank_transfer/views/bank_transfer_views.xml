@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_baho_bank_transfer_list" model="ir.ui.view">
+        <field name="name">baho.bank.transfer.list</field>
+        <field name="model">baho.bank.transfer</field>
+        <field name="arch" type="xml">
+            <list string="Bank Transfers" create="false" decoration-info="state == 'pending'"
+                  decoration-muted="state == 'cancel'">
+                <header>
+                    <button name="%(iconsult_bank_transfer.action_baho_bank_transfer_direct_wizard)d" type="action"
+                            string="New Transfer" class="btn-primary" display="always"
+                            groups="account.group_account_user"/>
+                </header>
+                <field name="name"/>
+                <field name="date"/>
+                <field name="source_journal_id"/>
+                <field name="destination_journal_id"/>
+                <field name="amount" sum="Total"/>
+                <field name="source_currency_id" column_invisible="True"/>
+                <field name="destination_amount"/>
+                <field name="destination_currency_id" column_invisible="True"/>
+                <field name="rate_display" optional="hide"/>
+                <field name="memo" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+                <field name="state" widget="badge" decoration-info="state == 'pending'"
+                       decoration-success="state == 'done'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_baho_bank_transfer_form" model="ir.ui.view">
+        <field name="name">baho.bank.transfer.form</field>
+        <field name="model">baho.bank.transfer</field>
+        <field name="arch" type="xml">
+            <form string="Bank Transfer" create="false">
+                <header>
+                    <button name="action_find_counterpart" type="object" string="Find Matching Line"
+                            class="btn-primary" invisible="state != 'pending'"/>
+                    <button name="action_cancel" type="object" string="Cancel Transfer"
+                            invisible="state == 'cancel'"
+                            confirm="Un-reconcile both legs and put the statement lines back to reconcile?"/>
+                    <field name="state" widget="statusbar" statusbar_visible="pending,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group string="Sent">
+                            <field name="source_journal_id"/>
+                            <field name="amount"/>
+                            <field name="charge_amount" invisible="not charge_amount"/>
+                            <field name="charge_account_id" invisible="not charge_amount"/>
+                            <field name="source_st_line_id"/>
+                            <field name="source_currency_id" invisible="1"/>
+                        </group>
+                        <group string="Received">
+                            <field name="destination_journal_id"/>
+                            <field name="destination_amount"/>
+                            <field name="destination_st_line_id"/>
+                            <field name="destination_currency_id" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="date"/>
+                            <field name="memo"/>
+                            <field name="rate_display" invisible="not rate_display"/>
+                            <field name="exchange_move_id" invisible="not exchange_move_id"/>
+                            <field name="source_line_created" invisible="not source_line_created"
+                                   string="Outgoing line awaiting statement import"/>
+                            <field name="destination_line_created" invisible="not destination_line_created"
+                                   string="Incoming line awaiting statement import"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="company_currency_id" invisible="1"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_baho_bank_transfer_search" model="ir.ui.view">
+        <field name="name">baho.bank.transfer.search</field>
+        <field name="model">baho.bank.transfer</field>
+        <field name="arch" type="xml">
+            <search string="Bank Transfers">
+                <field name="name"/>
+                <field name="source_journal_id"/>
+                <field name="destination_journal_id"/>
+                <field name="memo"/>
+                <filter name="pending" string="Pending" domain="[('state', '=', 'pending')]"/>
+                <filter name="done" string="Done" domain="[('state', '=', 'done')]"/>
+                <filter name="not_cancelled" string="Not Cancelled" domain="[('state', '!=', 'cancel')]"/>
+                <separator/>
+                <filter name="filter_date" string="Date" date="date"/>
+                <group>
+                    <filter name="group_source" string="From" context="{'group_by': 'source_journal_id'}"/>
+                    <filter name="group_destination" string="To" context="{'group_by': 'destination_journal_id'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_baho_bank_transfer" model="ir.actions.act_window">
+        <field name="name">Bank Transfers</field>
+        <field name="res_model">baho.bank.transfer</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_baho_bank_transfer_search"/>
+        <field name="context">{'search_default_not_cancelled': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No bank transfers yet</p>
+            <p>Click <b>New Transfer</b>, choose the two banks and the amount: both banks are
+               booked and reconciled at once. From a statement line in the bank reconciliation,
+               the ⋮ menu offers <b>Bank Transfer</b> too.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_baho_bank_transfer" name="Bank Transfers" parent="account.account_transactions_menu"
+              action="action_baho_bank_transfer" sequence="30" groups="account.group_account_readonly"/>
+</odoo>

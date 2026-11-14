@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_baho_bank_transfer_direct_wizard_form" model="ir.ui.view">
+        <field name="name">baho.bank.transfer.direct.wizard.form</field>
+        <field name="model">baho.bank.transfer.direct.wizard</field>
+        <field name="arch" type="xml">
+            <form string="New Bank Transfer">
+                <field name="company_id" invisible="1"/>
+                <field name="source_currency_id" invisible="1"/>
+                <field name="destination_currency_id" invisible="1"/>
+                <field name="is_cross_currency" invisible="1"/>
+                <field name="rate_from_currency_id" invisible="1"/>
+                <group>
+                    <group string="From">
+                        <field name="source_journal_id" options="{'no_create': True}"/>
+                        <field name="amount"/>
+                        <field name="date"/>
+                    </group>
+                    <group string="To">
+                        <field name="destination_journal_id" options="{'no_create': True}"/>
+                        <label for="rate" invisible="not is_cross_currency"/>
+                        <div class="o_row" invisible="not is_cross_currency">
+                            <field name="rate_label" nolabel="1"/>
+                            <field name="rate" nolabel="1"/>
+                            <field name="rate_to_currency_id" nolabel="1" readonly="1" options="{'no_open': True}"/>
+                        </div>
+                        <field name="destination_amount" invisible="not is_cross_currency"/>
+                    </group>
+                </group>
+                <group>
+                    <group string="Bank Charges">
+                        <field name="include_charges"/>
+                        <field name="charge_amount" invisible="not include_charges" required="include_charges"/>
+                        <field name="charge_account_id" invisible="not include_charges" required="include_charges"
+                               options="{'no_create': True}"/>
+                    </group>
+                    <group>
+                        <field name="memo"/>
+                    </group>
+                </group>
+                <div class="alert alert-info mb-0" role="status" invisible="not info">
+                    <field name="info" nolabel="1"/>
+                </div>
+                <footer>
+                    <button name="action_confirm" type="object" string="Transfer" class="btn-primary" data-hotkey="q"/>
+                    <button string="Discard" special="cancel" class="btn-secondary" data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_baho_bank_transfer_direct_wizard" model="ir.actions.act_window">
+        <field name="name">New Bank Transfer</field>
+        <field name="res_model">baho.bank.transfer.direct.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_baho_bank_transfer_new" name="New Bank Transfer" parent="account.account_transactions_menu"
+              action="action_baho_bank_transfer_direct_wizard" sequence="29" groups="account.group_account_user"/>
+</odoo>

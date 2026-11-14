@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_baho_bank_transfer_user,baho.bank.transfer user,model_baho_bank_transfer,account.group_account_user,1,1,1,1
+access_baho_bank_transfer_readonly,baho.bank.transfer readonly,model_baho_bank_transfer,account.group_account_readonly,1,0,0,0
+access_baho_bank_transfer_wizard_user,baho.bank.transfer.wizard user,model_baho_bank_transfer_wizard,account.group_account_user,1,1,1,1
+access_baho_bank_transfer_direct_wizard_user,baho.bank.transfer.direct.wizard user,model_baho_bank_transfer_direct_wizard,account.group_account_user,1,1,1,1
