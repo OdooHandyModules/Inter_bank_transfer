@@ -10,7 +10,8 @@ class BahoBankTransferWizard(models.TransientModel):
     _check_company_auto = True
 
     st_line_id = fields.Many2one('account.bank.statement.line', required=True, readonly=True)
-    company_id = fields.Many2one(related='st_line_id.company_id')
+    # The main company of the line's journal: the other bank may belong to it or to any of its branches.
+    company_id = fields.Many2one('res.company', compute='_compute_company_id')
     journal_id = fields.Many2one(related='st_line_id.journal_id', string="This Bank")
     line_date = fields.Date(related='st_line_id.date', string="Date")
     line_label = fields.Char(related='st_line_id.payment_ref', string="Label")
@@ -26,9 +27,9 @@ class BahoBankTransferWizard(models.TransientModel):
         help="A pending transfer this line is the missing leg of.")
 
     counterpart_journal_id = fields.Many2one(
-        'account.journal', string="Other Bank", check_company=True,
+        'account.journal', string="Other Bank",
         compute='_compute_counterpart_journal_id', store=True, readonly=False,
-        domain="[('type', 'in', ('bank', 'cash')), ('id', '!=', journal_id), ('company_id', '=', company_id)]")
+        domain="[('type', 'in', ('bank', 'cash')), ('id', '!=', journal_id), ('company_id', 'child_of', company_id)]")
     counterpart_currency_id = fields.Many2one('res.currency', compute='_compute_counterpart_currency_id')
     counterpart_imported = fields.Boolean(related='counterpart_journal_id.bt_statements_imported')
     is_cross_currency = fields.Boolean(compute='_compute_counterpart_currency_id')
@@ -63,6 +64,11 @@ class BahoBankTransferWizard(models.TransientModel):
     # -------------------------------------------------------------------------
 
     @api.depends('st_line_id')
+    def _compute_company_id(self):
+        for wizard in self:
+            wizard.company_id = wizard.st_line_id.company_id.root_id
+
+    @api.depends('st_line_id')
     def _compute_line(self):
         for wizard in self:
             st_line = wizard.st_line_id
@@ -77,7 +83,7 @@ class BahoBankTransferWizard(models.TransientModel):
             st_line = wizard.st_line_id
             pending = Transfer.search([
                 ('state', '=', 'pending'),
-                ('company_id', '=', st_line.company_id.id),
+                ('company_id', '=', st_line.company_id.root_id.id),
                 '|', ('source_journal_id', '=', st_line.journal_id.id),
                      ('destination_journal_id', '=', st_line.journal_id.id),
             ])

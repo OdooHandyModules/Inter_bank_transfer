@@ -1,6 +1,6 @@
 {
     'name': 'Bank to Bank Transfers',
-    'version': '19.0.1.1.0',
+    'version': '19.0.1.2.0',
     'category': 'Accounting/Accounting',
     'summary': 'Book both legs of an internal bank transfer from one statement line',
     'description': """

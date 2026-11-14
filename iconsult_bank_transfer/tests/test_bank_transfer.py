@@ -1,5 +1,5 @@
 from odoo import Command, fields
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tests import TransactionCase, tagged
 
 
@@ -318,3 +318,95 @@ class TestDirectBankTransfer(TestBankTransfer):
     def test_direct_same_bank_refused(self):
         with self.assertRaises(UserError):
             self._direct(self.bank_a, self.bank_a, 1000)
+
+
+@tagged('post_install', '-at_install')
+class TestBranchBankTransfer(TransactionCase):
+    """Transfers between the main company and its branches (Odoo branches: same legal entity)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.hq = cls.env.company.root_id
+        cls.branch = cls.env['res.company'].create({'name': 'BT Test Branch', 'parent_id': cls.hq.id})
+        cls.env.user.company_ids |= cls.branch
+        cls.env = cls.env(context=dict(cls.env.context, allowed_company_ids=[cls.hq.id, cls.branch.id]))
+        cls.date = fields.Date.to_date('2026-09-10')
+        Journal = cls.env['account.journal']
+        suspense = {'suspense_account_id': cls.hq.account_journal_suspense_account_id.id}
+        cls.hq_bank = Journal.create({'name': 'BT HQ Bank', 'code': 'BTHQ', 'type': 'bank',
+                                      'company_id': cls.hq.id})
+        cls.branch_cash = Journal.create({'name': 'BT Branch Cash', 'code': 'BTBC', 'type': 'cash',
+                                          'company_id': cls.branch.id, 'bt_statements_imported': False,
+                                          **suspense})
+        cls.branch_bank = Journal.create({'name': 'BT Branch Bank', 'code': 'BTBB', 'type': 'bank',
+                                          'company_id': cls.branch.id, **suspense})
+        cls.transfer_account = cls.hq.transfer_account_id
+
+    def _st_line(self, journal, amount, date=None, ref='BT branch line'):
+        return self.env['account.bank.statement.line'].create({
+            'journal_id': journal.id, 'amount': amount, 'date': date or self.date, 'payment_ref': ref,
+        })
+
+    def _transfer_of(self, st_line):
+        return self.env['baho.bank.transfer'].search([
+            '|', ('source_st_line_id', '=', st_line.id), ('destination_st_line_id', '=', st_line.id)])
+
+    def _assert_done(self, transfer):
+        self.assertEqual(transfer.state, 'done')
+        self.assertEqual(transfer.company_id, self.hq, "transfers are kept on the main company")
+        self.assertTrue(transfer.source_st_line_id.is_reconciled and transfer.destination_st_line_id.is_reconciled)
+        lines = transfer._bt_transfer_lines()
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(all(lines.mapped('reconciled')))
+        self.assertTrue(self.hq.currency_id.is_zero(sum(lines.mapped('balance'))))
+
+    def test_branch_cash_out_to_hq_bank_pending_then_imported(self):
+        cash_out = self._st_line(self.branch_cash, -150000, ref='POS cash out to HQ bank')
+        self.assertEqual(cash_out.company_id, self.branch)
+        wizard = self.env['baho.bank.transfer.wizard'].create({'st_line_id': cash_out.id})
+        self.assertEqual(wizard.company_id, self.hq)
+        self.assertIn(self.hq_bank, self.env['account.journal'].search(
+            [('type', 'in', ('bank', 'cash')), ('company_id', 'child_of', wizard.company_id.id)]))
+        wizard.counterpart_journal_id = self.hq_bank
+        wizard.action_confirm()
+        transfer = self._transfer_of(cash_out)
+        self.assertEqual(transfer.state, 'pending', "HQ bank statements are imported: wait for the deposit")
+        deposit = self._st_line(self.hq_bank, 150000, date=fields.Date.add(self.date, days=2), ref='Cash deposit')
+        self.assertEqual(transfer.destination_st_line_id, deposit)
+        self._assert_done(transfer)
+        self.assertEqual(deposit.company_id, self.hq)
+
+    def test_hq_bank_to_branch_cash_leg_created(self):
+        out_line = self._st_line(self.hq_bank, -80000)
+        self.env['baho.bank.transfer.wizard'].create({
+            'st_line_id': out_line.id, 'counterpart_journal_id': self.branch_cash.id}).action_confirm()
+        transfer = self._transfer_of(out_line)
+        self.assertEqual(transfer.destination_st_line_id.journal_id, self.branch_cash)
+        self.assertEqual(transfer.destination_st_line_id.company_id, self.branch)
+        self._assert_done(transfer)
+
+    def test_direct_between_branch_and_hq(self):
+        wizard = self.env['baho.bank.transfer.direct.wizard'].create({
+            'source_journal_id': self.branch_bank.id, 'destination_journal_id': self.hq_bank.id,
+            'amount': 60000, 'date': self.date})
+        self.assertEqual(wizard.company_id, self.hq)
+        action = wizard.action_confirm()
+        transfer = self.env['baho.bank.transfer'].browse(action['res_id'])
+        self._assert_done(transfer)
+        self.assertTrue(transfer.source_line_created and transfer.destination_line_created)
+        imported = self._st_line(self.branch_bank, -60000, ref='Branch bank statement')
+        self.assertEqual(transfer.source_st_line_id, imported, "the branch's imported line takes over")
+        self._assert_done(transfer)
+
+    def test_journal_of_another_company_refused(self):
+        other = self.env['res.company'].create({'name': 'BT Other Company'})
+        self.env.user.company_ids |= other
+        other_bank = self.env['account.journal'].with_context(
+            allowed_company_ids=[other.id] + self.env.context['allowed_company_ids']).create(
+            {'name': 'BT Other Bank', 'code': 'BTOB', 'type': 'bank', 'company_id': other.id})
+        with self.assertRaises(ValidationError):
+            self.env['baho.bank.transfer'].create({
+                'company_id': self.hq.id, 'date': self.date,
+                'source_journal_id': self.hq_bank.id, 'destination_journal_id': other_bank.id,
+                'amount': 1000, 'destination_amount': 1000, 'rate': 1.0})

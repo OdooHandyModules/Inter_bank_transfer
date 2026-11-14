@@ -8,13 +8,14 @@ class BahoBankTransferDirectWizard(models.TransientModel):
     _description = "New Bank Transfer"
     _check_company_auto = True
 
-    company_id = fields.Many2one('res.company', required=True, default=lambda self: self.env.company)
+    # The main company: banks and cash journals of the company and of all its branches can be used.
+    company_id = fields.Many2one('res.company', required=True, default=lambda self: self.env.company.root_id)
     source_journal_id = fields.Many2one(
-        'account.journal', string="From", required=True, check_company=True,
-        domain="[('type', 'in', ('bank', 'cash')), ('company_id', '=', company_id)]")
+        'account.journal', string="From", required=True,
+        domain="[('type', 'in', ('bank', 'cash')), ('company_id', 'child_of', company_id)]")
     destination_journal_id = fields.Many2one(
-        'account.journal', string="To", required=True, check_company=True,
-        domain="[('type', 'in', ('bank', 'cash')), ('company_id', '=', company_id), ('id', '!=', source_journal_id)]")
+        'account.journal', string="To", required=True,
+        domain="[('type', 'in', ('bank', 'cash')), ('company_id', 'child_of', company_id), ('id', '!=', source_journal_id)]")
     date = fields.Date(required=True, default=fields.Date.context_today)
     source_currency_id = fields.Many2one('res.currency', compute='_compute_currencies')
     destination_currency_id = fields.Many2one('res.currency', compute='_compute_currencies')

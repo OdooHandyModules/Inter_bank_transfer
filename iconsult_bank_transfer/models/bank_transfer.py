@@ -1,7 +1,7 @@
 import logging
 
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare
 
 _logger = logging.getLogger(__name__)
@@ -32,18 +32,19 @@ class BahoBankTransfer(models.Model):
         help="Pending: only one leg is booked; the other is matched automatically when its "
              "statement is imported.",
     )
+    # Always the main company: the two journals may belong to it or to any of its branches.
     company_id = fields.Many2one('res.company', required=True, readonly=True,
-                                 default=lambda self: self.env.company)
+                                 default=lambda self: self.env.company.root_id)
     company_currency_id = fields.Many2one(related='company_id.currency_id')
     date = fields.Date(required=True, readonly=True, tracking=True)
     memo = fields.Char(string="Memo")
 
     source_journal_id = fields.Many2one(
-        'account.journal', string="From", required=True, readonly=True, check_company=True,
-        domain="[('type', 'in', ('bank', 'cash'))]")
+        'account.journal', string="From", required=True, readonly=True,
+        domain="[('type', 'in', ('bank', 'cash')), ('company_id', 'child_of', company_id)]")
     destination_journal_id = fields.Many2one(
-        'account.journal', string="To", required=True, readonly=True, check_company=True,
-        domain="[('type', 'in', ('bank', 'cash'))]")
+        'account.journal', string="To", required=True, readonly=True,
+        domain="[('type', 'in', ('bank', 'cash')), ('company_id', 'child_of', company_id)]")
     source_currency_id = fields.Many2one('res.currency', compute='_compute_currencies', store=True)
     destination_currency_id = fields.Many2one('res.currency', compute='_compute_currencies', store=True)
 
@@ -106,11 +107,22 @@ class BahoBankTransfer(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            if vals.get('company_id'):
+                vals['company_id'] = self.env['res.company'].browse(vals['company_id']).root_id.id
             if vals.get('name', '/') == '/':
                 company = self.env['res.company'].browse(vals.get('company_id')) or self.env.company
                 vals['name'] = self.env['ir.sequence'].with_company(company).next_by_code(
                     'baho.bank.transfer') or '/'
         return super().create(vals_list)
+
+    @api.constrains('company_id', 'source_journal_id', 'destination_journal_id')
+    def _check_journals_company(self):
+        for transfer in self:
+            for journal in transfer.source_journal_id | transfer.destination_journal_id:
+                if journal.company_id.root_id != transfer.company_id:
+                    raise ValidationError(_(
+                        "The journal %(journal)s does not belong to %(company)s or one of its branches.",
+                        journal=journal.display_name, company=transfer.company_id.name))
 
     @api.ondelete(at_uninstall=False)
     def _unlink_only_cancelled(self):
@@ -503,7 +515,7 @@ class BahoBankTransfer(models.Model):
         adopted = self.env['account.bank.statement.line']
         candidates = self.sudo().search([
             ('state', '=', 'done'),
-            ('company_id', 'in', st_lines.company_id.ids),
+            ('company_id', 'in', st_lines.company_id.root_id.ids),
             '|', ('source_line_created', '=', True), ('destination_line_created', '=', True),
         ], order='date, id')
         for transfer in candidates:
@@ -540,7 +552,7 @@ class BahoBankTransfer(models.Model):
             return
         pending = self.sudo().search([
             ('state', '=', 'pending'),
-            ('company_id', 'in', st_lines.company_id.ids),
+            ('company_id', 'in', st_lines.company_id.root_id.ids),
             '|', ('source_journal_id', 'in', st_lines.journal_id.ids),
                  ('destination_journal_id', 'in', st_lines.journal_id.ids),
         ], order='date, id')

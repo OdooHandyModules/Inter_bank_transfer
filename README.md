@@ -14,6 +14,9 @@ instead of reconciling each side by hand against the Liquidity Transfer account.
 - Cross-currency transfers post the exchange difference; bank charges can be included in the outgoing line.
 - Transfers whose other leg has not been imported yet stay pending and are matched automatically when that
   statement arrives.
+- Works across **branches** (Odoo branches of one company): a branch's cash or bank journal can transfer to a
+  journal of the main company or of another branch. The transfer is kept on the main company and visible from
+  its branches; journals of a separate company are refused (that is an intercompany transaction, not a transfer).
 
 ## Requirements
 
